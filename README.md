@@ -22,7 +22,9 @@ build默认prod，watch默认dev。另单独提供了build:dev和watch:prod，�
 建议自行调整cross的目标。npm-run-all是为了兼容windows下无法同时执行两个npm script，若不需要转web平台，可考虑去掉。
 
 
-## MPX 中 Page 页面为啥要使用 Component 构造器来创建页面？小程序中没有 computed、watch 需要自己实现
+
+
+## MPX 中 Page 页面为啥要使用 Component 构造器来创建页面？由于小程序中没有 computed、watch 等概念，故使用 Component 自定义构造器需要自己实现
 
 见：https://developers.weixin.qq.com/community/develop/article/doc/0000a8d54acaf0c962e820a1a5e413
 
@@ -32,32 +34,75 @@ build默认prod，watch默认dev。另单独提供了build:dev和watch:prod，�
 
 ## 响应式系统重构————基于 Proxy
 
-getDefaultOptions => initProxy => context.__mpxProxy = new MpxProxy(rawOptions, context) => context.__mpxProxy.created()
+**流程：** getDefaultOptions => initProxy => context.__mpxProxy = new MpxProxy(rawOptions, context) => context.__mpxProxy.created()
+
+
+**组件执行流程**
+
+父组件 `created` (当前 `activeEffect` 为父组件，执行到 `this.initWatch()` 后， `activeEffect` 需要恢复原来的值。)  => 子组件 `created` =》
+
+target dep Observer
+
 
 
 ```JS
-  created () {
-    if (__mpx_mode__ !== 'web') {
-      setCurrentInstance(this)
-      this.initProps()
-      this.initSetup()
-      this.initData()
-      this.initComputed()
-      this.initWatch()
-      unsetCurrentInstance()
-    }
 
-    this.state = CREATED
-    this.callHook(CREATED)
-
-    if (__mpx_mode__ !== 'web') {
-      this.initRender()
+export default Class MpxProxy {
+    constructor(options, target, reCreated) {
+        this.target = target
+        this.reCreated = reCreated
+        this.uid = uid++
+        this.name = options.name || ''
+        this.options = options
+        // beforeCreate -> created -> mounted -> unmounted
+        this.state = BEFORECREATE
+        this.ignoreProxyMap = makeMap(Mpx.config.ignoreProxyWhiteList)
+        // 收集setup中动态注册的hooks，小程序与web环境都需要
+        this.hooks = {}
+        if (__mpx_mode__ !== 'web') {
+        this.scope = effectScope(true)  // 用来干嘛的？？？
+        // props响应式数据代理
+        this.props = {}
+        // data响应式数据代理
+        this.data = {}
+        // 非props key
+        this.localKeysMap = {}
+        // 渲染函数中收集的数据
+        this.renderData = {}
+        // 最小渲染数据
+        this.miniRenderData = {}
+        // 强制更新的数据
+        this.forceUpdateData = {}
+        // 下次是否需要强制更新全部渲染数据
+        this.forceUpdateAll = false
+        this.currentRenderTask = null
+        }
+        this.initApi()
+        this.callHook(BEFORECREATE)
     }
+    created () {
+        if (__mpx_mode__ !== 'web') {
+            setCurrentInstance(this)
+            this.initProps()
+            this.initSetup()
+            this.initData()
+            this.initComputed()
+            this.initWatch()
+            unsetCurrentInstance()
+        }
 
-    if (this.reCreated) {
-      nextTick(this.mounted.bind(this))
+        this.state = CREATED
+        this.callHook(CREATED)
+
+        if (__mpx_mode__ !== 'web') {
+            this.initRender()
+        }
+
+        if (this.reCreated) {
+            nextTick(this.mounted.bind(this))
+        }
     }
-  }
+}
 ```
 
 ### this.initProps()做了什么？？ 
@@ -69,7 +114,17 @@ getDefaultOptions => initProxy => context.__mpxProxy = new MpxProxy(rawOptions, 
 
 ```JS
 this.initProps()
+```
 
+<!-- initProps会将 this.props 对象变成响应式对象，内部构造__ob__属性，并对 this.props 对象的属性代理到this.target 上（组件实例），即 this.a 的值即为 this.props.a 的值 -->
+
+```JS
+this.props = {
+    __ob__: Observer {
+        dep: Dep {id: 0, subs: Array(0)}
+        value: {__ob__: Observer}
+    }
+}
 ```
 
 
@@ -87,6 +142,7 @@ this.initData()
 ```JS
     this.initComputed()
     this.initWatch()
+    // activeEffect 需要恢复原来的值。
     unsetCurrentInstance()
 ```
 
@@ -98,3 +154,8 @@ this.initData()
       this.initRender()
     }
 ```
+
+
+scope = new EffectScope()
+
+scope.effects.push(effect: ReactiveEffect)

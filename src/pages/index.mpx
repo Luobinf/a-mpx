@@ -1,5 +1,7 @@
 <template>
-  <m-list></m-list>
+  <view>
+    <text>{{ name }}</text>
+  </view>
 </template>
 
 <script>
@@ -7,13 +9,13 @@ import { createPage } from '@mpxjs/core'
 
 createPage({
   data: {
-    name: 90,
-    obj: {
+    name: 'jack',
+    info: {
       age: 90
     }
   },
   onLoad() {
-
+    this.name = 'ma'
   }
 })
 </script>
