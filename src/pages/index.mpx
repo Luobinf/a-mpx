@@ -11,7 +11,7 @@ createPage({
   data: {
     name: 'jack',
     info: {
-      age: 90
+      address: 'shaoxing'
     }
   },
   onLoad() {

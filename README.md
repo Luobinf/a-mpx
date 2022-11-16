@@ -60,7 +60,8 @@ export default Class MpxProxy {
         // 收集setup中动态注册的hooks，小程序与web环境都需要
         this.hooks = {}
         if (__mpx_mode__ !== 'web') {
-        this.scope = effectScope(true)  // 用来干嘛的？？？
+        // effectScope 是用来干嘛的，没搞懂？？
+        this.scope = effectScope(true)
         // props响应式数据代理
         this.props = {}
         // data响应式数据代理
@@ -82,6 +83,7 @@ export default Class MpxProxy {
     }
     created () {
         if (__mpx_mode__ !== 'web') {
+            // 设置当前 activeEffectScope。
             setCurrentInstance(this)
             this.initProps()
             this.initSetup()
@@ -136,6 +138,23 @@ this.props = {
 this.initData()
 ```
 
+```JS
+this.data = {
+    __ob__: Observer {
+        dep: Dep {id: 1, subs: Array(0)}
+        value: {__ob__: Observer}
+    },
+    info: {
+        address: 'shaoxing',
+        __ob__: Observer {
+            dep: Dep {id: 4, subs: Array(0)}
+            value: {__ob__: Observer}
+        },
+    },
+    name: 'jack'
+}
+```
+
 
 ### 暂不关心以下
 
@@ -153,9 +172,41 @@ this.initData()
     if (__mpx_mode__ !== 'web') {
       this.initRender()
     }
+
+    initRender () {
+        if (this.options.__nativeRender__) return this.doRender()
+
+        this.effect = new ReactiveEffect(() => {
+        if (this.target.__injectedRender) {
+            try {
+            return this.target.__injectedRender()
+            } catch (e) {
+            warn('Failed to execute render function, degrade to full-set-data mode.', this.options.mpxFileResource, e)
+            this.render()
+            }
+        } else {
+            this.render()
+        }
+        }, () => queueJob(update), this.scope)
+
+        const update = this.effect.run.bind(this.effect)
+        update.id = this.uid
+        update()
+    }
 ```
 
 
+```JS
 scope = new EffectScope()
 
 scope.effects.push(effect: ReactiveEffect)
+
+this.scope = effectScope(true)
+```
+
+
+target = {
+    name: {
+        subs: []
+    }
+}
